@@ -34,7 +34,7 @@ watch(() => props.media?.key, () => { imageFailed.value = false })
         <p v-if="error" class="detail-error">{{ error }}</p>
         <p v-if="media.studios?.length" class="detail-additional"><strong>Estúdio:</strong> {{ media.studios.join(', ') }}</p>
         <p v-if="media.originalTitle && media.originalTitle !== media.title" class="detail-additional"><strong>Título original:</strong> {{ media.originalTitle }}</p>
-        <div class="detail-provider">Informação: {{ media.provider === 'anilist' ? 'AniList' : 'TMDB' }} · Aberto no histórico local</div>
+        <div class="detail-provider">Informação: {{ media.provider === 'anilist' ? 'AniList' : media.provider === 'kitsu' ? 'Kitsu' : media.provider === 'tmdb' ? 'TMDB' : 'Cinemeta' }} · Aberto no histórico local</div>
       </div>
     </aside>
   </div>

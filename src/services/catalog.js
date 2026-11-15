@@ -1,5 +1,6 @@
-import { tmdbBrowse, tmdbDetails, tmdbGenres, tmdbImage } from './tmdb.js'
+import { cinemetaBrowse, cinemetaDetails, CINEMETA_GENRES } from './cinemeta.js'
 import { anilistBrowse, anilistDetails } from './anilist.js'
+import { kitsuBrowse, kitsuDetails } from './kitsu.js'
 
 export const typeLabels = { movies: 'Filme', series: 'Série', anime: 'Anime' }
 export const categoryMeta = {
@@ -8,38 +9,53 @@ export const categoryMeta = {
   anime: { title: 'Animes', eyebrow: 'OUTROS UNIVERSOS', description: 'Explora animes populares, os géneros e os lançamentos.' },
   history: { title: 'Histórico', eyebrow: 'O QUE JÁ EXPLORASTE', description: 'Os títulos que abriste neste navegador. Sem guardar progresso de reprodução.' },
 }
+const UNAVAILABLE = 'Sinopse indisponível no momento.'
 
 function formatRating(number) {
   return Number.isFinite(Number(number)) && Number(number) > 0 ? (Math.round(Number(number) * 10) / 10).toFixed(1) : '—'
 }
-
-// Mantemos só texto na sinopse: respostas GraphQL podem incluir marcação HTML.
 function safeText(value) {
-  return String(value || '')
-    .replace(/<br\s*\/?\s*>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .trim()
+  return String(value || '').replace(/<br\s*\/?\s*>/gi, '\n').replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').trim()
+}
+function safeImage(value) {
+  return typeof value === 'string' && /^https:\/\//i.test(value) ? value : null
+}
+function yearOf(...values) {
+  for (const value of values) {
+    const match = String(value || '').match(/\b(?:19|20)\d{2}\b/)
+    if (match) return match[0]
+  }
+  return '—'
+}
+function runtimeMinutes(value) {
+  if (Number.isFinite(Number(value)) && Number(value) > 0) return Number(value)
+  if (typeof value !== 'string') return null
+  const hours = Number(value.match(/(\d+)\s*h\b/i)?.[1] || 0)
+  const mins = Number(value.match(/(\d+)\s*m(?:in)?/i)?.[1] || 0)
+  if (hours || mins) return hours * 60 + mins
+  const digits = Number(value.match(/\d+/)?.[0] || 0)
+  return digits || null
+}
+function splitGenres(data) {
+  if (Array.isArray(data.genres)) return data.genres.filter(Boolean).map(genre => typeof genre === 'string' ? genre : genre.name).filter(Boolean)
+  return []
 }
 
-export function normalizeTmdb(data, kind) {
-  const genres = data.genres?.map(g => g.name) || []
+export function normalizeCinemeta(data, kind) {
+  const genres = splitGenres(data)
+  const id = data.id || data.imdb_id
   return {
-    key: `tmdb-${kind}-${data.id}`, id: data.id, kind, provider: 'tmdb',
-    type: typeLabels[kind], title: data.title || data.name || data.original_title || data.original_name || 'Sem título',
-    year: (data.release_date || data.first_air_date || '').slice(0, 4) || '—',
-    rating: formatRating(data.vote_average),
-    genre: genres[0] || '', genres, genreIds: data.genre_ids || [],
-    poster: tmdbImage(data.poster_path, 'w500'),
-    backdrop: tmdbImage(data.backdrop_path, 'w1280'),
-    synopsis: safeText(data.overview) || 'Sinopse indisponível no momento.',
-    runtime: data.runtime || (data.episode_run_time || [])[0] || null,
-    episodes: data.number_of_episodes || null, seasons: data.number_of_seasons || null,
-    tagline: data.tagline || '', originalTitle: data.original_title || data.original_name || '',
-    tint: 'violet',
+    key: `cinemeta-${kind}-${id}`, id, kind, provider: 'cinemeta', type: typeLabels[kind],
+    title: data.name || data.title || 'Sem título', year: yearOf(data.year, data.releaseInfo, data.released),
+    rating: formatRating(data.imdbRating), genre: genres[0] || '', genres,
+    poster: safeImage(data.poster), backdrop: safeImage(data.background || data.backdrop),
+    synopsis: safeText(data.description) || UNAVAILABLE, runtime: runtimeMinutes(data.runtime),
+    episodes: Array.isArray(data.videos) ? data.videos.filter(video => Number(video.season) > 0).length || null : null,
+    seasons: Array.isArray(data.videos) ? new Set(data.videos.map(video => Number(video.season)).filter(number => number > 0)).size || null : null,
+    originalTitle: data.originalName || '', cast: Array.isArray(data.cast) ? data.cast : [],
+    director: Array.isArray(data.director) ? data.director : [], tint: 'violet',
   }
 }
 
@@ -49,58 +65,81 @@ export function normalizeAnime(data) {
     key: `anilist-anime-${data.id}`, id: data.id, kind: 'anime', provider: 'anilist', type: 'Anime', title,
     year: data.seasonYear || '—', rating: formatRating(data.averageScore ? data.averageScore / 10 : null),
     genre: data.genres?.[0] || '', genres: data.genres || [],
-    poster: data.coverImage?.extraLarge || data.coverImage?.large || null,
-    backdrop: data.bannerImage || null,
-    synopsis: safeText(data.description) || 'Sinopse indisponível no momento.',
+    poster: safeImage(data.coverImage?.extraLarge || data.coverImage?.large), backdrop: safeImage(data.bannerImage),
+    synopsis: safeText(data.description) || UNAVAILABLE,
     episodes: data.episodes || null, runtime: data.duration || null, format: data.format || '',
-    status: data.status || '', studios: (data.studios?.nodes || []).map(s => s.name),
+    status: data.status || '', studios: (data.studios?.nodes || []).map(studio => studio.name),
     originalTitle: data.title?.native || '', tint: 'blue',
   }
 }
 
+export function normalizeKitsu(data) {
+  const attributes = data.attributes || {}
+  const genres = Array.isArray(data.genres) ? data.genres : []
+  return {
+    key: `kitsu-anime-${data.id}`, id: data.id, kind: 'anime', provider: 'kitsu', type: 'Anime',
+    title: attributes.titles?.en || attributes.canonicalTitle || attributes.titles?.en_jp || 'Sem título',
+    year: yearOf(attributes.startDate), rating: formatRating(attributes.averageRating ? Number(attributes.averageRating) / 10 : null),
+    genre: genres[0] || '', genres,
+    poster: safeImage(attributes.posterImage?.large || attributes.posterImage?.original || attributes.posterImage?.medium),
+    backdrop: safeImage(attributes.coverImage?.original || attributes.coverImage?.large),
+    synopsis: safeText(attributes.synopsis || attributes.description) || UNAVAILABLE,
+    episodes: attributes.episodeCount || null, runtime: attributes.episodeLength || null,
+    originalTitle: attributes.titles?.ja_jp || '', status: attributes.status || '', tint: 'blue',
+  }
+}
+
 const requestCache = new Map()
-function cached(cacheKey, factory, lifetime = 90_000) {
-  const cachedValue = requestCache.get(cacheKey)
-  if (cachedValue && Date.now() - cachedValue.created < lifetime) return cachedValue.promise
-  const promise = factory().catch(error => { requestCache.delete(cacheKey); throw error })
-  requestCache.set(cacheKey, { created: Date.now(), promise })
+export function invalidateCatalogCache() { requestCache.clear() }
+function cached(key, factory, lifetime = 90_000) {
+  const hit = requestCache.get(key)
+  if (hit && Date.now() - hit.created < lifetime) return hit.promise
+  const promise = factory().catch(error => { requestCache.delete(key); throw error })
+  requestCache.set(key, { created: Date.now(), promise })
   return promise
 }
-export function invalidateCatalogCache() { requestCache.clear() }
+
+async function browseRaw(kind, options) {
+  if (kind !== 'anime') return cinemetaBrowse(kind, options)
+  try { return await anilistBrowse(options) }
+  catch (firstError) {
+    if (firstError.name === 'AbortError') throw firstError
+    try { return await kitsuBrowse(options) }
+    catch (secondError) {
+      if (secondError.name === 'AbortError') throw secondError
+      throw new Error(`Anime indisponível. ${firstError.message} Alternativa Kitsu: ${secondError.message}`)
+    }
+  }
+}
 
 export async function browseCatalog(kind, options = {}) {
-  // Não colocamos a chave em nenhuma cache ou URL da aplicação.
   const { signal, ...rest } = options
-  const fetcher = () => kind === 'anime' ? anilistBrowse(rest) : tmdbBrowse(kind, rest)
-  // Consultas com AbortSignal não são partilhadas, evitando abortar pedidos de outros componentes.
-  const output = signal ? await (kind === 'anime' ? anilistBrowse({ ...rest, signal }) : tmdbBrowse(kind, { ...rest, signal }))
-    : await cached(JSON.stringify([kind, rest]), fetcher)
-  const items = output.entries.map(item => kind === 'anime' ? normalizeAnime(item) : normalizeTmdb(item, kind))
-  if (kind !== 'anime') {
-    try {
-      const genreMap = new Map((await availableGenres(kind)).map(genre => [genre.id, genre.name]))
-      for (const item of items) {
-        item.genres = item.genreIds.map(id => genreMap.get(id)).filter(Boolean)
-        item.genre = item.genres[0] || ''
-      }
-    } catch { /* lista ainda funciona sem nomes dos géneros */ }
-  }
-  return { ...output, items }
+  const raw = signal ? await browseRaw(kind, { ...rest, signal })
+    : await cached(JSON.stringify([kind, rest]), () => browseRaw(kind, rest))
+  const normalizer = raw.source === 'anilist' ? normalizeAnime
+    : raw.source === 'kitsu' ? normalizeKitsu : item => normalizeCinemeta(item, kind)
+  return { ...raw, items: raw.entries.map(normalizer) }
 }
 
 export async function readDetails(media) {
-  const data = media.provider === 'anilist' ? await anilistDetails(media.id) : await tmdbDetails(media.kind, media.id)
-  const detailed = media.provider === 'anilist' ? normalizeAnime(data) : normalizeTmdb(data, media.kind)
-  // Conserva os campos já recebidos na listagem, se detalhes estiverem incompletos.
-  return { ...media, ...detailed, poster: detailed.poster || media.poster, backdrop: detailed.backdrop || media.backdrop,
-    genres: detailed.genres.length ? detailed.genres : media.genres || [],
-    synopsis: detailed.synopsis === 'Sinopse indisponível no momento.' ? media.synopsis : detailed.synopsis }
+  if (media.provider === 'tmdb') return media
+  let detailed
+  if (media.provider === 'cinemeta') detailed = normalizeCinemeta(await cinemetaDetails(media.kind, media.id), media.kind)
+  else if (media.provider === 'kitsu') detailed = normalizeKitsu(await kitsuDetails(media.id))
+  else detailed = normalizeAnime(await anilistDetails(media.id))
+  return {
+    ...media, ...detailed,
+    poster: detailed.poster || media.poster, backdrop: detailed.backdrop || media.backdrop,
+    genres: detailed.genres?.length ? detailed.genres : media.genres || [],
+    synopsis: detailed.synopsis === UNAVAILABLE ? media.synopsis : detailed.synopsis,
+  }
 }
 
 export async function availableGenres(kind) {
   if (kind === 'anime') {
-    return ['Action','Adventure','Comedy','Drama','Fantasy','Horror','Mystery','Romance','Sci-Fi','Slice of Life','Sports','Supernatural','Thriller']
+    return ['Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Mystery', 'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller']
       .map(name => ({ id: name, name }))
   }
-  return cached(`genres-${kind}`, () => tmdbGenres(kind))
+  const list = kind === 'movies' ? CINEMETA_GENRES.slice(0, 19) : CINEMETA_GENRES
+  return list.map(name => ({ id: name, name }))
 }

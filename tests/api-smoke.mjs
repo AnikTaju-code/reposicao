@@ -1,40 +1,106 @@
-// Testes locais sem rede: validam normalização e configuração de pedidos.
+// Testes de integração com respostas simuladas: NÃO fazem pedidos reais à internet.
 import assert from 'node:assert/strict'
-import { tmdbBrowse, tmdbDetails, setTmdbKey, tmdbImage } from '../src/services/tmdb.js'
-import { anilistBrowse, anilistDetails } from '../src/services/anilist.js'
-import { normalizeTmdb, normalizeAnime } from '../src/services/catalog.js'
+import { cinemetaBrowse, cinemetaDetails, CINEMETA_GENRES } from '../src/services/cinemeta.js'
+import { anilistBrowse } from '../src/services/anilist.js'
+import { kitsuBrowse } from '../src/services/kitsu.js'
+import { browseCatalog, normalizeCinemeta, normalizeAnime, normalizeKitsu, readDetails } from '../src/services/catalog.js'
 
 const calls = []
-globalThis.sessionStorage = {
-  data: new Map(),
-  getItem(key) { return this.data.get(key) || null },
-  setItem(key, value) { this.data.set(key, value) },
-  removeItem(key) { this.data.delete(key) },
+let anilistFails = false
+const movie = {
+  id: 'tt0816692', name: 'Interstellar', year: 2014, imdbRating: '8.7',
+  genres: ['Adventure', 'Drama'], poster: 'https://images.example/interstellar.jpg',
+  background: 'https://images.example/interstellar-back.jpg', description: 'Uma missão no espaço.',
 }
-globalThis.fetch = async (url, init) => {
-  calls.push({ url: String(url), init })
-  if (String(url).startsWith('https://graphql.anilist.co')) {
-    const { query } = JSON.parse(init.body)
-    const anime = { id: 123, title: { english: 'Exemplo', romaji: 'Rei' }, description: 'Uma <b>sinopse</b>!', seasonYear: 2026, averageScore: 85, genres: ['Action'], coverImage: { extraLarge: 'https://cdn.example/anime.jpg' }, bannerImage: 'https://cdn.example/banner.jpg' }
-    return { ok: true, status: 200, json: async () => ({ data: query.includes('AnimeDetail') ? { Media: anime } : { Page: { media: [anime], pageInfo: { currentPage: 1, hasNextPage: true, total: 400 } } } }) }
+const series = { id: 'tt0903747', name: 'Breaking Bad', releaseInfo: '2008–2013', imdbRating: '9.5', genres: ['Crime', 'Drama'] }
+const anime = {
+  id: 7, title: { english: 'Exemplo', romaji: 'Rei', native: '例' }, seasonYear: 2026,
+  description: 'Uma <b>sinopse</b>!', averageScore: 85, genres: ['Action'],
+  coverImage: { large: 'https://cdn.example/anime.jpg' }, bannerImage: 'https://cdn.example/banner.jpg',
+}
+const kitsu = {
+  id: '18', type: 'anime', attributes: { canonicalTitle: 'Exemplo Kitsu', synopsis: 'Uma sinopse Kitsu',
+    averageRating: '81.20', posterImage: { large: 'https://img.example/kitsu.jpg' }, startDate: '2023-01-01', episodeCount: 13 },
+}
+const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body })
+globalThis.fetch = async (input, init = {}) => {
+  const url = String(input)
+  calls.push({ url, init })
+  if (url.startsWith('https://v3-cinemeta.strem.io/')) {
+    if (url.includes('/meta/')) return response({ meta: url.includes('/series/') ? series : movie })
+    return response({ metas: url.includes('/series/') ? [series] : [movie] })
   }
-  if (String(url).includes('/genre/')) return { ok:true,status:200,json:async()=>({genres:[{id:18,name:'Drama'}]}) }
-  if (String(url).includes('/movie/12')) return { ok:true,status:200,json:async()=>({id:12,title:'Exemplo',overview:'Uma sinopse.',vote_average:8.1,release_date:'2026-05-01',poster_path:'/poster.jpg',backdrop_path:'/back.jpg',genres:[{id:18,name:'Drama'}]}) }
-  return { ok:true,status:200,json:async()=>({page:1,total_pages:2,results:[{id:12,title:'Exemplo',release_date:'2026-05-01',vote_average:8.1,genre_ids:[18],overview:'Uma sinopse.',poster_path:'/poster.jpg'}]}) }
+  if (url === 'https://graphql.anilist.co') {
+    const payload = JSON.parse(init.body)
+    if (anilistFails) return response({ errors: [{ message: 'Consulta temporariamente recusada' }], data: null }, 400)
+    return response({ data: payload.query.includes('AnimeDetail') ? { Media: anime } : { Page: { pageInfo: { currentPage: 1, hasNextPage: false }, media: [anime] } } })
+  }
+  if (url.startsWith('https://kitsu.app/api/edge/')) {
+    return response(url.includes('/anime/') ? { data: kitsu } : { data: [kitsu], links: { next: null } })
+  }
+  throw new Error('Serviço inesperado: ' + url)
 }
+const test = (label, fn) => fn().then(() => console.log('✓ ' + label))
 
-setTmdbKey('chave-de-teste')
-const listing = await tmdbBrowse('movies', { page:1, year:'2026', minRating:'8', genre:'18',sort:'rating' })
-assert.equal(listing.entries.length,1)
-assert(calls[0].url.includes('/discover/movie'))
-assert(calls[0].url.includes('vote_average.gte=8'))
-assert.equal((await tmdbDetails('movies',12)).overview,'Uma sinopse.')
-assert.equal(tmdbImage('/poster.jpg'),'https://image.tmdb.org/t/p/w500/poster.jpg')
-assert.equal(normalizeTmdb(listing.entries[0],'movies').rating,'8.1')
-const animePage = await anilistBrowse({ page:1, genre:'Action' })
-assert.equal(animePage.hasNextPage,true)
-assert.equal(animePage.entries[0].title.english,'Exemplo')
-const animeDetails = await anilistDetails(123)
-assert.equal(normalizeAnime(animeDetails).synopsis,'Uma sinopse!')
-assert.equal(normalizeAnime(animeDetails).rating,'8.5')
-console.log('6 testes das integrações passaram (respostas simuladas; não é uma ligação real às APIs).')
+await test('Cinemeta: listagem sem chave, imagens e nota', async () => {
+  const list = await cinemetaBrowse('movies')
+  assert.equal(list.entries[0].name, 'Interstellar')
+  assert(calls.at(-1).url.endsWith('/catalog/movie/top.json'))
+  const normalized = normalizeCinemeta(list.entries[0], 'movies')
+  assert.equal(normalized.poster, 'https://images.example/interstellar.jpg')
+  assert.equal(normalized.rating, '8.7')
+  assert.equal(normalized.synopsis, 'Uma missão no espaço.')
+})
+await test('Cinemeta: pesquisa com extras corretos', async () => {
+  await cinemetaBrowse('movies', { query: 'Spider Man' })
+  assert(calls.at(-1).url.endsWith('/catalog/movie/top/search=Spider%20Man.json'))
+  await cinemetaBrowse('series', { genre: 'Crime' })
+  assert(calls.at(-1).url.endsWith('/catalog/series/top/genre=Crime.json'))
+})
+await test('Cinemeta: catálogo por ano, nota e paginação', async () => {
+  await cinemetaBrowse('movies', { year: '2026' })
+  assert(calls.at(-1).url.endsWith('/catalog/movie/year/genre=2026.json'))
+  await cinemetaBrowse('movies', { sort: 'rating', page: 2 })
+  assert(calls.at(-1).url.endsWith('/catalog/movie/imdbRating/skip=100.json'))
+})
+await test('Cinemeta: detalhes de série e gêneros', async () => {
+  assert.equal((await cinemetaDetails('series', 'tt0903747')).name, 'Breaking Bad')
+  assert.equal(normalizeCinemeta(series, 'series').year, '2008')
+  assert(CINEMETA_GENRES.includes('Drama'))
+})
+await test('AniList: consulta, datas e sinopse sem HTML', async () => {
+  const listing = await anilistBrowse({ page: 1, year: '2026' })
+  assert.equal(listing.entries[0].title.english, 'Exemplo')
+  assert.equal(normalizeAnime(listing.entries[0]).synopsis, 'Uma sinopse!')
+  assert.equal(normalizeAnime(listing.entries[0]).rating, '8.5')
+  const variables = JSON.parse(calls.at(-1).init.body).variables
+  assert.equal(variables.start, 20260000)
+  assert.equal(variables.end, 20270000)
+})
+await test('Kitsu: normalização de alternativa', async () => {
+  const list = await kitsuBrowse()
+  const item = normalizeKitsu(list.entries[0])
+  assert.equal(item.title, 'Exemplo Kitsu')
+  assert.equal(item.rating, '8.1')
+  assert.equal(item.episodes, 13)
+})
+await test('Fallback: HTTP 400 AniList utiliza Kitsu', async () => {
+  anilistFails = true
+  const result = await browseCatalog('anime', { query: 'fallback-test-400' })
+  assert.equal(result.source, 'kitsu')
+  assert.equal(result.items[0].provider, 'kitsu')
+  assert.equal((await readDetails(result.items[0])).synopsis, 'Uma sinopse Kitsu')
+  anilistFails = false
+})
+await test('Histórico: conserva detalhes locais de itens TMDB antigos', async () => {
+  const legacyMedia = { provider: 'tmdb', title: 'Filme antigo', id: 12 }
+  assert.equal(await readDetails(legacyMedia), legacyMedia)
+})
+await test('Navegação: sem configuração de API', async () => {
+  const { readFileSync } = await import('node:fs')
+  const app = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8')
+  const top = readFileSync(new URL('../src/components/Topbar.vue', import.meta.url), 'utf8')
+  assert(!app.includes('ApiSettings'))
+  assert(!top.includes('Configurar TMDB'))
+})
+console.log('Todos os 9 testes de serviços passaram (dados simulados).')

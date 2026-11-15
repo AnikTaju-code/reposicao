@@ -1,4 +1,4 @@
-# CineNexus — Vue 3 + TMDB + AniList
+# CineNexus — Vue 3 + Cinemeta + AniList + Kitsu
 
 Catálogo de **filmes, séries e animes** com pesquisa, filtros, sinopses, cartazes reais e histórico de títulos abertos localmente.
 
@@ -13,23 +13,19 @@ npm run dev
 
 Abrir o endereço indicado no terminal (normalmente `http://localhost:5173`).
 
-### Configurar filmes e séries (TMDB)
+### APIs de catálogo
 
-1. Cria uma conta na [TMDB](https://www.themoviedb.org/) e obtém uma **API Key v3** em [Definições → API](https://www.themoviedb.org/settings/api).
-2. Abre a aplicação e clica no ícone **Definições** no canto superior direito.
-3. Cola a chave e clica em **Guardar nesta sessão**.
-4. As listas de filmes e séries, capas, filtros, pesquisa e sinopses são carregadas pela API TMDB.
+Todas as fontes funcionam sem chave configurada pelo utilizador:
 
-A chave é mantida em `sessionStorage` e usada em pedidos no navegador. **Aviso de segurança:** por ser enviada do frontend, ela é visível em pedidos de rede e no DevTools. Não coloques segredos reais no código nem uses chaves de produção confidenciais desta forma. A chave não é adicionada ao repositório nem compilada na aplicação. Para uma versão pública na qual visitantes não introduzam a própria chave, recomenda-se um endpoint servidor/edge que mantenha o token TMDB privado, com limites e proteção contra abusos. **O GitHub Pages sozinho não pode ocultar credenciais da API.**
+- Filmes e séries usam os catálogos públicos do [Cinemeta](https://v3-cinemeta.strem.io/).
+- Animes usam a [AniList](https://anilist.co/), com fallback automático para a [Kitsu](https://kitsu.app/) quando a AniList falha.
 
-### Animes (AniList)
-
-A secção de animes funciona sem chave, utilizando `https://graphql.anilist.co`. Se a AniList estiver temporariamente indisponível ou limitar pedidos, a interface mostra uma mensagem clara.
+As APIs são consultadas diretamente pelo navegador. A disponibilidade e os filtros dependem dos serviços públicos; o Cinemeta pode limitar combinações de filtros e resultados por página.
 
 ## Funcionalidades
 
 - Home com carrosséis: Histórico, Populares · Filmes, Populares · Séries, Em destaque · Animes.
-- Cartazes reais de TMDB / AniList (logo CineNexus como fallback quando faltar imagem).
+- Cartazes reais de Cinemeta / AniList / Kitsu (logo CineNexus como fallback quando faltar imagem).
 - Pesquisa conjunta dos três catálogos por título na barra superior.
 - Filtros por **género, ano, nota**; ordenação por populares, mais avaliados e recentes; paginação.
 - Painel de detalhes com imagem horizontal, sinopse, géneros, duração e episódios/temporadas quando existirem.
@@ -39,12 +35,11 @@ A secção de animes funciona sem chave, utilizando `https://graphql.anilist.co`
 
 ## Observações técnicas
 
-- A TMDB tem endpoints diferentes para popularidade, pesquisa e filtros: `/popular`, `/search` e `/discover`. Na barra de pesquisa, o filtro de texto é feito pelo endpoint `/search`, enquanto filtros avançados na página de coleção usam `/discover`.
-- A AniList usa GraphQL e permite solicitar apenas os campos necessários.
-- A sinopse vem de `overview` (TMDB) ou `description` (AniList). Quando não existe, mostramos «Sinopse indisponível no momento».
-- As imagens vêm dos próprios serviços: cartazes (`poster_path`/`coverImage`) e fundos (`backdrop_path`/`bannerImage`).
+- Cinemeta fornece catálogos públicos de filmes e séries; alguns filtros são aplicados aos resultados recebidos no navegador.
+- A AniList usa GraphQL e solicita apenas os campos necessários. A Kitsu é usada como alternativa para animes se a AniList estiver indisponível.
+- Sinopses e imagens são normalizadas a partir dos campos de cada serviço. Quando uma sinopse não existe, mostramos «Sinopse indisponível no momento».
 - A avaliação mostrada é a média fornecida por cada base de dados, normalizada visualmente para 0–10; **não** é necessariamente a nota IMDb.
-- Fontes e licenças: [TMDB](https://developer.themoviedb.org/) e [AniList](https://docs.anilist.co/). Este produto utiliza a API TMDB, mas não é apoiado ou certificado pela TMDB.
+- Fontes: [Cinemeta](https://v3-cinemeta.strem.io/), [AniList](https://docs.anilist.co/) e [Kitsu](https://kitsu.app/).
 
 ## Compilar para distribuição
 
@@ -60,17 +55,18 @@ A pasta `dist/` é o site estático gerado pelo Vite. O `vite.config.js` usa `ba
 ```text
 src/
   assets/                 Logo e ícone CineNexus
-  components/             Sidebar, Topbar, MediaCard, SectionRow, DetailPanel, ApiSettings
+  components/             Sidebar, Topbar, MediaCard, SectionRow, DetailPanel
   services/
-    tmdb.js               Pedidos à API TMDB
-    anilist.js            Consultas GraphQL à AniList
-    catalog.js            Mapeamento de campos e cache de leitura
+    cinemeta.js            Catálogos públicos de filmes e séries
+    anilist.js             Consultas GraphQL à AniList
+    kitsu.js               Fallback público para animes
+    catalog.js             Mapeamento de campos e cache de leitura
     history.js            Histórico local
   views/
     HomeView.vue          Home com carrosséis
     CollectionView.vue    Filmes, Séries, Animes, Histórico
     SearchView.vue        Pesquisa combinada
-  App.vue                 Estado geral, diálogos e eventos
+  App.vue                 Estado geral e eventos
   style.css               Estilos da interface
   router.js               Rotas
 ```
@@ -81,4 +77,4 @@ src/
 npm run test:services
 ```
 
-Este teste simula respostas das APIs para verificar pedidos e conversão de dados. **Não** valida a disponibilidade real da TMDB/AniList.
+Este teste simula respostas das APIs para verificar pedidos e conversão de dados. **Não** valida a disponibilidade real dos serviços.
