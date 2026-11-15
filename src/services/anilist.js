@@ -9,6 +9,7 @@ query AnimeCatalog($page:Int!, $search:String, $genre:String, $rating:Int, $star
       id title { romaji english native } description(asHtml:false) format
       status episodes duration seasonYear genres averageScore popularity
       coverImage { large extraLarge color } bannerImage
+      trailer { id site thumbnail }
     }
   }
 }`
@@ -18,6 +19,7 @@ query AnimeDetail($id:Int!) {
     id title { romaji english native } description(asHtml:false)
     format status episodes duration seasonYear genres averageScore popularity
     coverImage { large extraLarge color } bannerImage
+    trailer { id site thumbnail }
     studios(isMain:true) { nodes { name } }
     source countryOfOrigin siteUrl
   }

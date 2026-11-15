@@ -43,6 +43,46 @@ function splitGenres(data) {
   return []
 }
 
+function youtubeIdFrom(value) {
+  const text = String(value || '').trim()
+  if (/^[A-Za-z0-9_-]{11}$/.test(text)) return text
+  try {
+    const url = new URL(text)
+    const host = url.hostname.toLowerCase().replace(/^www\./, '')
+    if (!['youtu.be', 'm.youtube.com', 'youtube.com', 'youtube-nocookie.com'].includes(host)) return null
+    const id = url.searchParams.get('v') || (host === 'youtu.be'
+      ? url.pathname.slice(1).split('/')[0]
+      : url.pathname.match(/\/(?:embed|shorts|live)\/([^/?]+)/)?.[1])
+    return /^[A-Za-z0-9_-]{11}$/.test(id || '') ? id : null
+  } catch { return null }
+}
+
+function normalizeTrailerEntry(entry, defaultSite = 'youtube') {
+  if (!entry || typeof entry !== 'object') return null
+  const site = String(entry.site || defaultSite || '').toLowerCase()
+  if (!site.includes('youtube')) return null
+  const youtubeId = youtubeIdFrom(entry.source || entry.key || entry.id || entry.youtubeVideoId)
+    || youtubeIdFrom(entry.url || entry.link)
+  if (!youtubeId) return null
+  return {
+    provider: 'youtube', id: youtubeId, title: entry.name || entry.title || 'Trailer',
+    type: entry.type || 'Trailer',
+    thumbnail: safeImage(entry.thumbnail) || `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
+    watchUrl: `https://www.youtube.com/watch?v=${youtubeId}`,
+  }
+}
+
+function normalizeCinemetaTrailer(data) {
+  const candidates = [
+    ...(Array.isArray(data.trailers) ? data.trailers : []),
+    ...(Array.isArray(data.trailerStreams) ? data.trailerStreams : []),
+  ]
+  return candidates
+    .filter(entry => !entry?.type || String(entry.type).toLowerCase() === 'trailer')
+    .map(entry => normalizeTrailerEntry(entry, entry?.site || 'youtube'))
+    .find(Boolean) || null
+}
+
 export function normalizeCinemeta(data, kind) {
   const genres = splitGenres(data)
   const id = data.id || data.imdb_id
@@ -55,7 +95,8 @@ export function normalizeCinemeta(data, kind) {
     episodes: Array.isArray(data.videos) ? data.videos.filter(video => Number(video.season) > 0).length || null : null,
     seasons: Array.isArray(data.videos) ? new Set(data.videos.map(video => Number(video.season)).filter(number => number > 0)).size || null : null,
     originalTitle: data.originalName || '', cast: Array.isArray(data.cast) ? data.cast : [],
-    director: Array.isArray(data.director) ? data.director : [], tint: 'violet',
+    director: Array.isArray(data.director) ? data.director : [],
+    trailer: normalizeCinemetaTrailer(data), tint: 'violet',
   }
 }
 
@@ -69,7 +110,8 @@ export function normalizeAnime(data) {
     synopsis: safeText(data.description) || UNAVAILABLE,
     episodes: data.episodes || null, runtime: data.duration || null, format: data.format || '',
     status: data.status || '', studios: (data.studios?.nodes || []).map(studio => studio.name),
-    originalTitle: data.title?.native || '', tint: 'blue',
+    originalTitle: data.title?.native || '',
+    trailer: normalizeTrailerEntry(data.trailer, data.trailer?.site || 'youtube'), tint: 'blue',
   }
 }
 
@@ -85,7 +127,9 @@ export function normalizeKitsu(data) {
     backdrop: safeImage(attributes.coverImage?.original || attributes.coverImage?.large),
     synopsis: safeText(attributes.synopsis || attributes.description) || UNAVAILABLE,
     episodes: attributes.episodeCount || null, runtime: attributes.episodeLength || null,
-    originalTitle: attributes.titles?.ja_jp || '', status: attributes.status || '', tint: 'blue',
+    originalTitle: attributes.titles?.ja_jp || '', status: attributes.status || '',
+    trailer: attributes.youtubeVideoId ? normalizeTrailerEntry({ id: attributes.youtubeVideoId }) : null,
+    tint: 'blue',
   }
 }
 
@@ -132,6 +176,7 @@ export async function readDetails(media) {
     poster: detailed.poster || media.poster, backdrop: detailed.backdrop || media.backdrop,
     genres: detailed.genres?.length ? detailed.genres : media.genres || [],
     synopsis: detailed.synopsis === UNAVAILABLE ? media.synopsis : detailed.synopsis,
+    trailer: detailed.trailer || media.trailer || null,
   }
 }
 

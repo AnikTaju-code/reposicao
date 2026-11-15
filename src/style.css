@@ -249,3 +249,19 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   .settings-buttons button { justify-content:center; }
   .collection-grid .skeleton-poster { width:137px; }
 }
+
+/* Player de trailers incorporado no painel de detalhes. */
+.trailer-section { margin-top:29px; }
+.trailer-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:11px; }
+.trailer-heading h3 { margin:0; font-family:'Outfit',sans-serif; font-size:18px; }
+.trailer-heading > span { color:#8f83ac; font-size:10px; letter-spacing:.04em; }
+.trailer-frame { position:relative; width:100%; aspect-ratio:16/9; overflow:hidden; border:1px solid #403456; border-radius:13px; background:#080713; box-shadow:0 12px 30px rgba(0,0,0,.2); }
+.trailer-frame iframe,.trailer-player-host { display:block; width:100%; height:100%; border:0; background:#080713; }
+.trailer-preview { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; width:100%; height:100%; overflow:hidden; padding:0; border:0; background:#151126; color:#fff; }
+.trailer-preview img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.84; transition:transform .35s ease; }
+.trailer-preview:hover img { transform:scale(1.045); }
+.trailer-preview-shade { position:absolute; inset:0; background:linear-gradient(0deg,rgba(6,5,16,.84),rgba(6,5,16,.08) 72%); }
+.trailer-play { position:relative; z-index:1; display:flex; align-items:center; justify-content:center; width:62px; height:62px; padding-left:4px; border-radius:50%; background:linear-gradient(135deg,#9c6aff,#5b42c5); color:white; box-shadow:0 8px 28px rgba(116,76,221,.48); transition:transform .2s ease,box-shadow .2s ease; }
+.trailer-preview:hover .trailer-play { transform:scale(1.09); box-shadow:0 10px 34px rgba(116,76,221,.62); }
+.trailer-preview-label { position:absolute; z-index:1; left:14px; bottom:12px; display:flex; align-items:center; gap:7px; font-size:12px; font-weight:700; text-shadow:0 2px 8px #000; }
+@media(max-width:760px) { .trailer-play { width:54px; height:54px; } }

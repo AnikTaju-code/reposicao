@@ -29,14 +29,16 @@ As APIs são consultadas diretamente pelo navegador. A disponibilidade e os filt
 - Pesquisa conjunta dos três catálogos por título na barra superior.
 - Filtros por **género, ano, nota**; ordenação por populares, mais avaliados e recentes; paginação.
 - Painel de detalhes com imagem horizontal, sinopse, géneros, duração e episódios/temporadas quando existirem.
+- Pré-visualização de trailers do YouTube no painel de detalhes, carregada apenas quando o utilizador inicia o vídeo.
 - Histórico local automático dos **títulos que o utilizador abriu** (não há reprodução nem progresso de episódios); botão para apagar histórico.
 - Vue Router em modo hash, compatível com hospedagem estática no GitHub Pages.
-- Sem backend próprio, sem login, streaming, trailers, plugins, addons ou sincronização.
+- Sem backend próprio, login, reprodução integral de filmes/séries, plugins, addons ou sincronização.
 
 ## Observações técnicas
 
 - Cinemeta fornece catálogos públicos de filmes e séries; alguns filtros são aplicados aos resultados recebidos no navegador.
 - A AniList usa GraphQL e solicita apenas os campos necessários. A Kitsu é usada como alternativa para animes se a AniList estiver indisponível.
+- Os trailers são aceites apenas quando a fonte fornece um ID válido do YouTube; o player externo só é carregado após o clique.
 - Sinopses e imagens são normalizadas a partir dos campos de cada serviço. Quando uma sinopse não existe, mostramos «Sinopse indisponível no momento».
 - A avaliação mostrada é a média fornecida por cada base de dados, normalizada visualmente para 0–10; **não** é necessariamente a nota IMDb.
 - Fontes: [Cinemeta](https://v3-cinemeta.strem.io/), [AniList](https://docs.anilist.co/) e [Kitsu](https://kitsu.app/).
