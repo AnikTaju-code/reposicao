@@ -1,10 +1,11 @@
 <script setup>
 import { RouterLink, useRoute } from 'vue-router'
-import { Clock3, Film, Tv2, Sparkles } from 'lucide-vue-next'
+import { House, Clock3, Film, Tv2, Sparkles } from 'lucide-vue-next'
 import brandIcon from '../assets/cinenexus-icon.png'
 
 const route = useRoute()
 const menu = [
+  { name: 'Início', to: '/', icon: House },
   { name: 'Histórico', to: '/historico', icon: Clock3 },
   { name: 'Filmes', to: '/filmes', icon: Film },
   { name: 'Séries', to: '/series', icon: Tv2 },
