@@ -22,6 +22,10 @@ Todas as fontes funcionam sem chave configurada pelo utilizador:
 
 As APIs são consultadas diretamente pelo navegador. A disponibilidade e os filtros dependem dos serviços públicos; o Cinemeta pode limitar combinações de filtros e resultados por página.
 
+## Publicação
+
+O GitHub Actions publica automaticamente a branch `trailer` no [GitHub Pages](https://aniktaju-code.github.io/reposicao/) após cada push. O workflow executa os testes de serviços e gera a versão de produção antes do deploy.
+
 ## Funcionalidades
 
 - Home com carrosséis: Histórico, Populares · Filmes, Populares · Séries, Em destaque · Animes.
